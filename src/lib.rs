@@ -3,8 +3,6 @@ use zed_extension_api::{
     self as zed, Command, ContextServerId, DownloadedFileType, Project, Result,
 };
 
-const VERSION: &str = "3.0.3";
-
 struct ZuraffaExtension;
 
 impl zed::Extension for ZuraffaExtension {
@@ -49,13 +47,12 @@ impl ZuraffaExtension {
             .map_err(|e| e.to_string())?
             .join(&binary_name);
 
-        if !binary_path.exists() {
-            let url = format!(
-                "https://github.com/arrrrny/zuraffa/releases/download/v{}/{}",
-                VERSION, binary_name
-            );
-            zed::download_file(&url, &binary_name, DownloadedFileType::Uncompressed)?;
-        }
+        // Always download latest release
+        let url = format!(
+            "https://github.com/arrrrny/zuraffa/releases/latest/download/{}",
+            binary_name
+        );
+        zed::download_file(&url, &binary_name, DownloadedFileType::Uncompressed)?;
 
         let binary_path_str = binary_path.to_string_lossy().to_string();
         zed::make_file_executable(&binary_path_str)?;
