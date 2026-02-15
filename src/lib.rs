@@ -54,37 +54,49 @@ impl ZuraffaExtension {
             _ => return Err(format!("Unsupported platform: {:?} {:?}", os, arch).into()),
         };
 
-        let binary_filename = if os == zed::Os::Windows {
-            format!("zuraffa_mcp_server-{}-{}.exe", os_name, arch_name)
-        } else {
-            format!("zuraffa_mcp_server-{}-{}", os_name, arch_name)
-        };
+        let is_windows = os == zed::Os::Windows;
+        let ext = if is_windows { ".exe" } else { "" };
+
+        let server_filename = format!("zuraffa_mcp_server-{}-{}{}", os_name, arch_name, ext);
+        let cli_filename = format!("zfa-{}-{}{}", os_name, arch_name, ext);
 
         let version_dir = format!("zuraffa-{}", VERSION);
-        let binary_path = format!("{}/{}", version_dir, binary_filename);
+        let server_path = format!("{}/{}", version_dir, server_filename);
+        let cli_path = format!("{}/{}", version_dir, cli_filename);
 
-        // 1. Return cached path if binary is still fresh
+        // 1. Return cached path if server binary is still fresh
         if let Some(path) = &self.cached_binary_path {
             if Self::is_fresh(path) {
                 return Ok(path.clone());
             }
         }
 
-        // 2. Check disk — exists and less than a week old
-        if Self::is_fresh(&binary_path) {
-            self.cached_binary_path = Some(binary_path.clone());
-            return Ok(binary_path);
+        // 2. Check disk — both exist and fresh
+        if Self::is_fresh(&server_path) && Self::is_fresh(&cli_path) {
+            self.cached_binary_path = Some(server_path.clone());
+            return Ok(server_path);
         }
 
-        // 3. Download (first install, new version, or stale)
+        // 3. Download both binaries
         fs::create_dir_all(&version_dir).map_err(|e| e.to_string())?;
 
-        let url = format!(
-            "https://github.com/arrrrny/zuraffa/releases/latest/download/{}",
-            binary_filename
-        );
-        zed::download_file(&url, &binary_path, DownloadedFileType::Uncompressed)?;
-        zed::make_file_executable(&binary_path)?;
+        let base_url = "https://github.com/arrrrny/zuraffa/releases/latest/download";
+
+        // Download MCP server
+        zed::download_file(
+            &format!("{}/{}", base_url, server_filename),
+            &server_path,
+            DownloadedFileType::Uncompressed,
+        )?;
+        zed::make_file_executable(&server_path)?;
+
+        // Download CLI binary
+        zed::download_file(
+            &format!("{}/{}", base_url, cli_filename),
+            &cli_path,
+            DownloadedFileType::Uncompressed,
+        )?;
+        zed::make_file_executable(&cli_path)?;
 
         // 4. Clean up old version directories
         if let Ok(entries) = fs::read_dir(".") {
@@ -97,8 +109,8 @@ impl ZuraffaExtension {
             }
         }
 
-        self.cached_binary_path = Some(binary_path.clone());
-        Ok(binary_path)
+        self.cached_binary_path = Some(server_path.clone());
+        Ok(server_path)
     }
 }
 
