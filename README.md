@@ -1,4 +1,4 @@
-# Zuraffa Zed Extension
+# Zuraffa MCP Server Zed Extension
 
 [Zuraffa](https://zuraffa.com) is an AI-first Flutter Clean Architecture Framework with MCP server for generating UseCases, Repositories, Views, Controllers, State objects, and Data layers.
 
@@ -59,6 +59,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [Documentation](https://zuraffa.com/docs/intro)
+- [Documentation](https://zuraffa.com/docs/features/mcp-server)
 - [GitHub Repository](https://github.com/arrrrny/zuraffa)
 - [Pub.dev](https://pub.dev/packages/zuraffa)

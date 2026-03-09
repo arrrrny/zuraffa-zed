@@ -1,5 +1,5 @@
 [package]
-name = "zuraffa"
+name = "mcp-server-zuraffa"
 version = "3.16.0"
 edition = "2021"
 

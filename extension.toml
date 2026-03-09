@@ -1,5 +1,5 @@
-id = "zuraffa"
-name = "Zuraffa"
+id = "mcp-server-zuraffa"
+name = "Zuraffa MCP Server"
 version = "3.16.0"
 schema_version = 1
 description = "Clean Architecture Flutter code generation with AI-first MCP server for generating UseCases, Repositories, Views, Controllers, and more"
@@ -10,7 +10,8 @@ authors = ["ARRRRNY <ahmettok@gmail.com>"]
 kind = "Rust"
 version = "3.16.0"
 
-[context_servers.zuraffa]
+[context_servers.mcp-server-zuraffa]
+name = "Zuraffa MCP Server"
 
 [[capabilities]]
 kind = "download_file"

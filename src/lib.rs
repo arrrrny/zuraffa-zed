@@ -1,11 +1,10 @@
 use std::fs;
-use std::time::{Duration, SystemTime};
 use zed_extension_api::{
-    self as zed, Command, ContextServerId, DownloadedFileType, Project, Result,
+    self as zed, Command, ContextServerConfiguration, ContextServerId, GithubReleaseOptions,
+    Project, Result,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60); // 1 week
 
 struct ZuraffaExtension {
     cached_binary_path: Option<String>,
@@ -31,19 +30,53 @@ impl zed::Extension for ZuraffaExtension {
             env: vec![],
         })
     }
+
+    fn context_server_configuration(
+        &mut self,
+        _context_server_id: &ContextServerId,
+        _project: &Project,
+    ) -> Result<Option<ContextServerConfiguration>> {
+        let installation_instructions = format!(
+            r#"# Zuraffa MCP Server
+
+The Zuraffa MCP Server is installed, but it requires the Zuraffa Flutter package to work.
+
+⚠️ Important Requirements
+
+Flutter Project Only: Zuraffa only works inside Flutter projects (must have pubspec.yaml).
+Add Dependency: Add this line to your pubspec.yaml under dependencies::
+```
+zuraffa: ^{}
+```
+Install: Run flutter pub get in your project.
+
+Documentation: https://zuraffa.com/docs/features/mcp-server
+Pub.dev: https://pub.dev/packages/zuraffa
+
+Once the package is installed in a Flutter project, the MCP server will be ready to use.
+"#,
+            VERSION
+        );
+
+        Ok(Some(ContextServerConfiguration {
+            installation_instructions,
+            default_settings: "{}".to_string(),
+            settings_schema: "{}".to_string(),
+        }))
+    }
 }
 
 impl ZuraffaExtension {
-    fn is_fresh(path: &str) -> bool {
-        fs::metadata(path)
-            .ok()
-            .filter(|m| m.is_file())
-            .and_then(|m| m.modified().ok())
-            .and_then(|modified| SystemTime::now().duration_since(modified).ok())
-            .is_some_and(|age| age < MAX_AGE)
-    }
-
     fn get_or_download_binary(&mut self) -> Result<String> {
+        // Fetch the latest release from GitHub
+        let release = zed::latest_github_release(
+            "arrrrny/zuraffa",
+            GithubReleaseOptions {
+                require_assets: true,
+                pre_release: false,
+            },
+        )?;
+
         let (os, arch) = zed::current_platform();
 
         let (os_name, arch_name) = match (os, arch) {
@@ -60,50 +93,60 @@ impl ZuraffaExtension {
         let server_filename = format!("zuraffa_mcp_server-{}-{}{}", os_name, arch_name, ext);
         let cli_filename = format!("zfa-{}-{}{}", os_name, arch_name, ext);
 
-        let version_dir = format!("zuraffa-{}", VERSION);
+        // Both assets are raw binaries (uncompressed)
+        let server_asset_name = server_filename.clone();
+        let cli_asset_name = cli_filename.clone();
+
+        // Use the release version as provided by GitHub (e.g., "v3.16.0")
+        let version_dir = format!("mcp-server-zuraffa-{}", release.version);
         let server_path = format!("{}/{}", version_dir, server_filename);
         let cli_path = format!("{}/{}", version_dir, cli_filename);
 
-        // 1. Return cached path if server binary is still fresh
-        if let Some(path) = &self.cached_binary_path {
-            if Self::is_fresh(path) {
-                return Ok(path.clone());
-            }
-        }
-
-        // 2. Check disk — both exist and fresh
-        if Self::is_fresh(&server_path) && Self::is_fresh(&cli_path) {
+        // Check if both binaries already exist
+        if fs::metadata(&server_path).map_or(false, |m| m.is_file())
+            && fs::metadata(&cli_path).map_or(false, |m| m.is_file())
+        {
             self.cached_binary_path = Some(server_path.clone());
             return Ok(server_path);
         }
 
-        // 3. Download both binaries
+        // Create directory
         fs::create_dir_all(&version_dir).map_err(|e| e.to_string())?;
 
-        let base_url = "https://github.com/arrrrny/zuraffa/releases/latest/download";
+        // Find assets in the release
+        let server_asset = release
+            .assets
+            .iter()
+            .find(|a| a.name == server_asset_name)
+            .ok_or_else(|| format!("Asset not found: {}", server_asset_name))?;
+        let cli_asset = release
+            .assets
+            .iter()
+            .find(|a| a.name == cli_asset_name)
+            .ok_or_else(|| format!("Asset not found: {}", cli_asset_name))?;
 
-        // Download MCP server
+        // Download server (uncompressed)
         zed::download_file(
-            &format!("{}/{}", base_url, server_filename),
+            &server_asset.download_url,
             &server_path,
-            DownloadedFileType::Uncompressed,
+            zed::DownloadedFileType::Uncompressed,
         )?;
         zed::make_file_executable(&server_path)?;
 
-        // Download CLI binary
+        // Download CLI (raw binary)
         zed::download_file(
-            &format!("{}/{}", base_url, cli_filename),
+            &cli_asset.download_url,
             &cli_path,
-            DownloadedFileType::Uncompressed,
+            zed::DownloadedFileType::Uncompressed,
         )?;
         zed::make_file_executable(&cli_path)?;
 
-        // 4. Clean up old version directories
+        // Clean up old version directories
         if let Ok(entries) = fs::read_dir(".") {
             for entry in entries.flatten() {
                 let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("zuraffa-") && name_str != version_dir {
+                let name_str = name.to_string_lossy().to_string();
+                if name_str.starts_with("mcp-server-zuraffa-") && name_str != version_dir {
                     fs::remove_dir_all(entry.path()).ok();
                 }
             }
