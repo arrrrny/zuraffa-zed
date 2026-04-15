@@ -68,7 +68,12 @@ Once the package is installed in a Flutter project, the MCP server will be ready
 
 impl ZuraffaExtension {
     fn get_or_download_binary(&mut self) -> Result<String> {
-        // Fetch the latest release from GitHub
+        if let Some(path) = &self.cached_binary_path {
+            if fs::metadata(path).map_or(false, |m| m.is_file()) {
+                return Ok(path.clone());
+            }
+        }
+
         let release = zed::latest_github_release(
             "arrrrny/zuraffa",
             GithubReleaseOptions {
@@ -79,73 +84,78 @@ impl ZuraffaExtension {
 
         let (os, arch) = zed::current_platform();
 
-        let (os_name, arch_name) = match (os, arch) {
-            (zed::Os::Mac, zed::Architecture::Aarch64) => ("macos", "arm64"),
-            (zed::Os::Mac, zed::Architecture::X8664) => ("macos", "x64"),
-            (zed::Os::Linux, zed::Architecture::X8664) => ("linux", "x64"),
-            (zed::Os::Windows, zed::Architecture::X8664) => ("windows", "x64"),
-            _ => return Err(format!("Unsupported platform: {:?} {:?}", os, arch).into()),
+        // Map to standardized naming conventions
+        let os_name = match os {
+            zed::Os::Mac => "macos",
+            zed::Os::Linux => "linux",
+            zed::Os::Windows => "windows",
         };
 
-        let is_windows = os == zed::Os::Windows;
-        let ext = if is_windows { ".exe" } else { "" };
+        let arch_name = match arch {
+            zed::Architecture::Aarch64 => "arm64",
+            zed::Architecture::X8664 => "x64",
+            _ => return Err(format!("Unsupported architecture: {:?}", arch).into()),
+        };
 
-        let server_filename = format!("zuraffa_mcp_server-{}-{}{}", os_name, arch_name, ext);
-        let cli_filename = format!("zfa-{}-{}{}", os_name, arch_name, ext);
+        // Flexible asset finding (supports darwin/macos and arm64/x64 fallbacks)
+        let find_asset = |name_prefix: &str| {
+            release.assets.iter().find(|a| {
+                let name = a.name.to_lowercase();
+                name.contains(name_prefix) &&
+                (name.contains(os_name) || (os_name == "macos" && name.contains("darwin"))) &&
+                (name.contains(arch_name) || (arch_name == "arm64" && name.contains("x64")))
+            })
+        };
 
-        // Both assets are raw binaries (uncompressed)
-        let server_asset_name = server_filename.clone();
-        let cli_asset_name = cli_filename.clone();
+        let server_asset = find_asset("zuraffa_mcp_server")
+            .ok_or_else(|| format!("Server asset not found for {}/{}", os_name, arch_name))?;
 
-        // Use the release version as provided by GitHub (e.g., "v3.16.0")
+        let cli_asset = find_asset("zfa")
+            .ok_or_else(|| format!("CLI asset not found for {}/{}", os_name, arch_name))?;
+
         let version_dir = format!("mcp-server-zuraffa-{}", release.version);
-        let server_path = format!("{}/{}", version_dir, server_filename);
-        let cli_path = format!("{}/{}", version_dir, cli_filename);
+        let binary_ext = if os == zed::Os::Windows { ".exe" } else { "" };
+        let server_path = format!("{}/zuraffa_mcp_server{}", version_dir, binary_ext);
+        let cli_path = format!("{}/zfa{}", version_dir, binary_ext);
 
-        // Check if both binaries already exist
-        if fs::metadata(&server_path).map_or(false, |m| m.is_file())
-            && fs::metadata(&cli_path).map_or(false, |m| m.is_file())
-        {
+        if fs::metadata(&server_path).map_or(false, |m| m.is_file()) {
             self.cached_binary_path = Some(server_path.clone());
             return Ok(server_path);
         }
 
-        // Create directory
         fs::create_dir_all(&version_dir).map_err(|e| e.to_string())?;
 
-        // Find assets in the release
-        let server_asset = release
-            .assets
-            .iter()
-            .find(|a| a.name == server_asset_name)
-            .ok_or_else(|| format!("Asset not found: {}", server_asset_name))?;
-        let cli_asset = release
-            .assets
-            .iter()
-            .find(|a| a.name == cli_asset_name)
-            .ok_or_else(|| format!("Asset not found: {}", cli_asset_name))?;
+        let get_download_type = |asset_name: &str| {
+            if asset_name.ends_with(".gz") || asset_name.ends_with(".tar.gz") {
+                zed::DownloadedFileType::Gzip
+            } else if asset_name.ends_with(".zip") {
+                zed::DownloadedFileType::Zip
+            } else {
+                zed::DownloadedFileType::Uncompressed
+            }
+        };
 
-        // Download server (uncompressed)
+        // Download server
         zed::download_file(
             &server_asset.download_url,
             &server_path,
-            zed::DownloadedFileType::Uncompressed,
+            get_download_type(&server_asset.name),
         )?;
         zed::make_file_executable(&server_path)?;
 
-        // Download CLI (raw binary)
+        // Download CLI
         zed::download_file(
             &cli_asset.download_url,
             &cli_path,
-            zed::DownloadedFileType::Uncompressed,
+            get_download_type(&cli_asset.name),
         )?;
         zed::make_file_executable(&cli_path)?;
 
-        // Clean up old version directories
+        // Cleanup old versions
         if let Ok(entries) = fs::read_dir(".") {
             for entry in entries.flatten() {
                 let name = entry.file_name();
-                let name_str = name.to_string_lossy().to_string();
+                let name_str = name.to_string_lossy();
                 if name_str.starts_with("mcp-server-zuraffa-") && name_str != version_dir {
                     fs::remove_dir_all(entry.path()).ok();
                 }
