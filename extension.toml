@@ -17,8 +17,3 @@ name = "Zuraffa MCP Server"
 kind = "download_file"
 host = "github.com"
 path = ["arrrrny", "zuraffa", "**"]
-
-[[capabilities]]
-kind = "process:exec"
-command = "*"
-args = ["**"]
