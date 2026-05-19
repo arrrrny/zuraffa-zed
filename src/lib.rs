@@ -110,13 +110,9 @@ impl ZuraffaExtension {
         let server_asset = find_asset("zuraffa_mcp_server")
             .ok_or_else(|| format!("Server asset not found for {}/{}", os_name, arch_name))?;
 
-        let cli_asset = find_asset("zfa")
-            .ok_or_else(|| format!("CLI asset not found for {}/{}", os_name, arch_name))?;
-
         let version_dir = format!("mcp-server-zuraffa-{}", release.version);
         let binary_ext = if os == zed::Os::Windows { ".exe" } else { "" };
         let server_path = format!("{}/zuraffa_mcp_server{}", version_dir, binary_ext);
-        let cli_path = format!("{}/zfa{}", version_dir, binary_ext);
 
         if fs::metadata(&server_path).map_or(false, |m| m.is_file()) {
             self.cached_binary_path = Some(server_path.clone());
@@ -135,21 +131,12 @@ impl ZuraffaExtension {
             }
         };
 
-        // Download server
         zed::download_file(
             &server_asset.download_url,
             &server_path,
             get_download_type(&server_asset.name),
         )?;
         zed::make_file_executable(&server_path)?;
-
-        // Download CLI
-        zed::download_file(
-            &cli_asset.download_url,
-            &cli_path,
-            get_download_type(&cli_asset.name),
-        )?;
-        zed::make_file_executable(&cli_path)?;
 
         // Cleanup old versions
         if let Ok(entries) = fs::read_dir(".") {
