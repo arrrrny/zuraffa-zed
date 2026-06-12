@@ -1,6 +1,6 @@
 [package]
 name = "mcp-server-zuraffa"
-version = "5.0.2"
+version = "5.1.1"
 edition = "2021"
 
 [lib]
