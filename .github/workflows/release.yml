@@ -11,7 +11,7 @@ jobs:
       - uses: huacnlee/zed-extension-action@v2
         with:
           extension-name: mcp-server-zuraffa
-          push-to: arrrrny/zed-extensions
+          push-to: arrrrny/extensions
         env:
           # the personal access token should have "repo" & "workflow" scopes
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
