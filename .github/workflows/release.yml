@@ -1,17 +1,33 @@
+name: Release Zed Extension
+
 on:
   push:
     tags:
       - "v*"
 
 jobs:
-  homebrew:
-    name: Release Zed Extension
+  release:
+    name: Create Release
     runs-on: ubuntu-latest
     steps:
-      - uses: huacnlee/zed-extension-action@v2
+      - uses: actions/checkout@v4
+
+      - name: Build WASM binary
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo build --target wasm32-unknown-unknown --release
+          cp target/wasm32-unknown-unknown/release/mcp_server_zuraffa.wasm extension.wasm
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          extension-name: mcp-server-zuraffa
-          push-to: arrrrny/extensions
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            extension.wasm
+            extension.toml
+          draft: false
+          prerelease: false
         env:
-          # the personal access token should have "repo" & "workflow" scopes
-          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
