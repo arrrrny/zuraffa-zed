@@ -8,7 +8,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Fallback tag used when the GitHub API is unreachable (rate-limited, network issue, etc.).
 /// The primary path ALWAYS tries `latest_github_release` first.
-const FALLBACK_TAG: &str = "v5.1.1";
+const FALLBACK_TAG: &str = "v5.2.2";
 
 struct ZuraffaExtension {
     cached_binary_path: Option<String>,
@@ -107,9 +107,7 @@ impl ZuraffaExtension {
             }
         }
 
-        // Step 3: Last resort — try the API-tagged version via direct URL.
-        // This catches the case where the API succeeded in step 1 for version
-        // resolution but the asset matching failed for some reason.
+        // Step 3: If both the API and direct download failed, report the error.
         Err("Failed to download zuraffa_mcp_server binary. Check your network connection and try again.".into())
     }
 
@@ -128,6 +126,29 @@ impl ZuraffaExtension {
             _ => return Err(format!("Unsupported architecture: {:?}", arch).into()),
         };
         Ok((os_name, arch_name))
+    }
+
+    /// Check whether a release asset matches our target platform.
+    fn asset_matches(asset: &zed::GithubReleaseAsset, os_name: &str, arch_name: &str) -> bool {
+        let name = asset.name.to_lowercase();
+        if !name.contains("zuraffa_mcp_server") {
+            return false;
+        }
+        let os_ok = name.contains(os_name) || (os_name == "macos" && name.contains("darwin"));
+        if !os_ok {
+            return false;
+        }
+        name.contains(arch_name) || (arch_name == "arm64" && name.contains("aarch64"))
+    }
+
+    /// Returns true for compressed archive assets that should NOT be preferred
+    /// over raw binaries.
+    fn is_archive_asset(name: &str) -> bool {
+        let lower = name.to_lowercase();
+        lower.ends_with(".tar.gz")
+            || lower.ends_with(".gz")
+            || lower.ends_with(".zip")
+            || lower.ends_with(".tar")
     }
 
     /// Preferred path: fetch the latest release via API, find the matching asset,
@@ -150,31 +171,29 @@ impl ZuraffaExtension {
             return Ok(server_path);
         }
 
-        // Find the right asset — match prefix, OS, and arch exactly
-        let asset = release
+        // Collect all assets matching our platform.
+        let matches: Vec<_> = release
             .assets
             .iter()
-            .find(|a| {
-                let name = a.name.to_lowercase();
-                if !name.contains("zuraffa_mcp_server") {
-                    return false;
-                }
-                let os_ok =
-                    name.contains(os_name) || (os_name == "macos" && name.contains("darwin"));
-                if !os_ok {
-                    return false;
-                }
-                // Exact arch match only — no cross-arch fallback
-                let arch_ok =
-                    name.contains(arch_name) || (arch_name == "arm64" && name.contains("aarch64"));
-                arch_ok
-            })
+            .filter(|a| Self::asset_matches(a, os_name, arch_name))
+            .collect();
+
+        // Prefer raw binaries over archives (.tar.gz / .gz / .zip).
+        // Downloading a .tar.gz with Gzip only strips the gzip layer and
+        // leaves a tar file — not an executable — which causes the server
+        // to fail on startup.
+        let asset = matches
+            .iter()
+            .find(|a| !Self::is_archive_asset(&a.name))
+            .or_else(|| matches.first())
             .ok_or_else(|| format!("No zuraffa_mcp_server asset for {}/{}", os_name, arch_name))?;
 
-        let download_type = if asset.name.ends_with(".gz") || asset.name.ends_with(".tar.gz") {
-            zed::DownloadedFileType::Gzip
-        } else if asset.name.ends_with(".zip") {
-            zed::DownloadedFileType::Zip
+        let download_type = if Self::is_archive_asset(&asset.name) {
+            if asset.name.ends_with(".zip") {
+                zed::DownloadedFileType::Zip
+            } else {
+                zed::DownloadedFileType::Gzip
+            }
         } else {
             zed::DownloadedFileType::Uncompressed
         };
