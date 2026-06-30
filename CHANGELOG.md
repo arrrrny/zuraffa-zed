@@ -1,3 +1,8 @@
+## [5.3.0] - 2026-06-30
+
+### Changed
+- Updated to version 5.3.0
+
 # Changelog
 
 ## [5.2.2] - 2026-06-19
