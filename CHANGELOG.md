@@ -1,3 +1,9 @@
+## [5.6.1] - 2026-07-20
+
+### Changed
+
+- Updated to version 5.6.1 (zorphy and other dependency updates)
+
 ## [5.6.0] - 2026-07-16
 
 ### Changed
