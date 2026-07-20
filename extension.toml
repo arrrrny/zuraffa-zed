@@ -3,7 +3,7 @@ name = "Zuraffa MCP Server"
 version = "5.6.1"
 schema_version = 1
 description = "Clean Architecture Flutter code generation with AI-first MCP server for generating UseCases, Repositories, Views, Controllers, and more"
-repository = "https://github.com/arrrrny/zuraffa"
+repository = "https://github.com/arrrrny/zuraffa-zed"
 authors = ["ARRRRNY <ahmettok@gmail.com>"]
 
 [lib]
