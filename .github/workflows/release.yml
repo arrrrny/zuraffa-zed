@@ -12,6 +12,7 @@ jobs:
         with:
           extension-name: mcp-server-zuraffa
           push-to: arrrrny/extensions
+          tag: ${{ github.ref_name }}
         env:
           # the personal access token should have "repo" & "workflow" scopes
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
